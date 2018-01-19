@@ -902,11 +902,14 @@ func enumValueProtoComments(reg *descriptor.Registry, enum *descriptor.Enum) str
 	var comments []string
 	for idx, value := range enum.GetValue() {
 		name := value.GetName()
+		number := strconv.Itoa(int(value.GetNumber()))
 		//原本实现
 		//str := protoComments(reg, enum.File, enum.Outers, "EnumType", int32(enum.Index), protoPath, int32(idx))
 		str := protoMessageFieldAndEnumValueComments(reg, enum.File, enum.Outers, "EnumType", int32(enum.Index), protoPath, int32(idx))
 		if str != "" {
-			comments = append(comments, name+": "+str)
+			//原来实现
+			//comments = append(comments, name+ ": "+str)
+			comments = append(comments, name+" = "+number+" : "+str)
 		}
 	}
 	if len(comments) > 0 {
