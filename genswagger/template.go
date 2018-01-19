@@ -154,6 +154,19 @@ func queryParams(message *descriptor.Message, field *descriptor.Field, prefix st
 	return params, nil
 }
 
+//查找所有的message和enumeration
+func findMessagesAndEnumerations(messages []*descriptor.Message, enums []*descriptor.Enum, reg *descriptor.Registry, m messageMap, e enumMap) {
+	for _, message := range messages {
+		m[fullyQualifiedNameToSwaggerName(message.FQMN(), reg)] = message
+		findNestedMessagesAndEnumerations(message, reg, m, e)
+	}
+	for _, enum := range enums {
+		e[fullyQualifiedNameToSwaggerName(enum.FQEN(), reg)] = enum
+		//TODO 这里我们假定枚举没有嵌套类型
+	}
+}
+
+//下面是根据Service来查找相应的message和enumeration
 // findServicesMessagesAndEnumerations discovers all messages and enums defined in the RPC methods of the service.
 func findServicesMessagesAndEnumerations(s []*descriptor.Service, reg *descriptor.Registry, m messageMap, e enumMap, refs refMap) {
 	for _, svc := range s {
@@ -350,7 +363,9 @@ func primitiveSchema(t pbdescriptor.FieldDescriptorProto_Type) (ftype, format st
 	case pbdescriptor.FieldDescriptorProto_TYPE_SINT32:
 		return "integer", "int32", true
 	case pbdescriptor.FieldDescriptorProto_TYPE_SINT64:
-		return "string", "int64", true
+		//原来实现
+		// return "string", "int64", true
+		return "integer", "int64", true
 	default:
 		return "", "", false
 	}
@@ -532,15 +547,26 @@ func renderServices(services []*descriptor.Service, paths swaggerPathsObject, re
 						}
 					}
 
+					var (
+						description string
+					)
+
+					//支持path的参数显示注释
+					// TODO:这里默认的message里面的请求都是primitive类型，注意如果Path参数是枚举类型（参数是枚举类型生成pb.go会报错），所以这里我们也没有做验证
+					for _, field := range meth.RequestType.Fields {
+						if *field.Name == *parameter.Target.Name {
+							description = fieldProtoComments(reg, meth.RequestType, field)
+							break
+						}
+					}
 					parameters = append(parameters, swaggerParameterObject{
 						Name:     parameter.String(),
 						In:       "path",
 						Required: true,
 						// Parameters in gRPC-Gateway can only be strings?
-						Type:   paramType,
-						Format: paramFormat,
-						//TODO 这里要添加一个获取当前parameter的注释添加到description成员变量中
-
+						Type:        paramType,
+						Format:      paramFormat,
+						Description: description,
 					})
 				}
 				// Now check if there is a body parameter
@@ -698,7 +724,10 @@ func applyTemplate(p param) (string, error) {
 	// write their request and response types out as definition objects.
 	m := messageMap{}
 	e := enumMap{}
-	findServicesMessagesAndEnumerations(p.Services, p.reg, m, e, refs)
+	//只获取service中有的message和enum
+	// findServicesMessagesAndEnumerations(p.Services, p.reg, m, e, refs)
+	//获取所有的message和enum
+	findMessagesAndEnumerations(p.Messages, p.Enums, p.reg, m, e)
 	renderMessagesAsDefinition(m, s.Definitions, p.reg)
 	renderEnumerationsAsDefinition(e, s.Definitions, p.reg)
 
